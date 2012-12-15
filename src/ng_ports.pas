@@ -39,7 +39,12 @@ unit ng.ports; implementation
   { keyboard handler }
   function vm.handle_keyboard( msg : int32 ) : int32;
   begin
+    {$IFDEF GRAPHICAL}
+    vdpRenderDisplay (tScreen);
+    result := ord (vdpPollKeyboard (tScreen));    
+    {$ELSE}
     result := ord( kvm.readkey );
+    {$ENDIF}
   end;
 
   { input file handler }
@@ -57,11 +62,75 @@ unit ng.ports; implementation
 
   { -- port 2 : simple text output ---------------------------- }
 
+  {$IFDEF GRAPHICAL}
+  procedure vm.clear;
+    var i : longword;
+  begin
+    for i := 0 to cScnChrSize do tScreen.aCharMap[i] := 0;
+    for i := 0 to cScnAtrSize do tScreen.aAttrMap[i] := 0;
+    cx := 0; cy := 0;  
+  end;    
+
+    
+  function vm.handle_write (msg : int32): int32;
+    var x:    int32;
+        adr:  longword;
+        attr: tVDPAttrData;
+            
+    procedure cursorRight; inline;
+    begin
+      if cx < cScnCol-1 then cx := cx + 1
+                        else if cy < cScnRow-1 then begin cy := cy + 1; cx := 0;   end
+                                               else begin clear; cy := 0; cx := 0; end;
+    end;
+  
+    procedure cursorLeft; inline;
+    begin
+      if cx < cScnCol-1 then cx := cx-1;
+    end;
+  
+    procedure cursorBackspace; inline;
+    begin
+      attr[1] := 0; vdpWriteAttrMap (tScreen, adr, attr);    
+      vdpWriteCharMap (tScreen, adr, 0);
+      if (cx < cScnCol-1) and (cx > 0) then cx := cx - 1;         
+    end;
+  
+    procedure cursorReturn; inline;
+    begin
+      attr[1] := 0; vdpWriteAttrMap (tScreen, adr, attr);
+      cy := cy + 1; cx := 0;
+      if cy > cScnRow-1 then begin
+         clear; cy := 0; cx := 0; end;
+    end;
+    
+  begin
+    if msg = 1 then begin
+      x := self.data.pop;
+      if x < 0 then clear else
+         if x < 32 then begin case chr (x) of
+                                ^H: cursorBackspace;
+                                ^J: cursorReturn;
+                                ^M: ; end;
+                        end;
+      adr := cy * cScnCol + cx;
+      attr[1] := tScreen.rBR; vdpWriteAttrMap (tScreen, adr, attr);
+      if x > 31 then begin attr[1] := 0; vdpWriteAttrMap (tScreen, adr, attr);
+                           vdpWriteCharMap (tScreen, adr, x); end;
+      if x > 31 then cursorRight;
+      if count = refresh then begin
+         count := 0; vdpRenderDisplay (tScreen); end;
+    end;
+    count := count + 1;
+    result := 0;
+  end;
+
+  {$ELSE}
   procedure clear;
   begin
     kvm.clrscr;
     kvm.gotoxy( 0, 0 );
-  end;
+  end; { clear }
 
   function vm.handle_write( msg : int32 ) : int32;
     var x : int32;
@@ -79,7 +148,9 @@ unit ng.ports; implementation
       else write( chr( x ))
     end;
     result := 0;
-  end;
+  end; { vm.handle_write }
+  {$ENDIF}
+  
 
   { -- port 3 : video refresh --------------------------------- }
 
@@ -148,8 +219,10 @@ unit ng.ports; implementation
 
   { -- port 6 : graphic canvas -------------------------------- }
 
+  {$IFDEF GRAPHICAL}
   function vm.handle_canvas( msg: int32 ) : int32;
-{    var x, y, h, w : int32;}
+     var x, y, h, w : int32;
+         attr: tVdpAttrData;
   begin
     result := 0;
     case msg of
@@ -191,10 +264,46 @@ unit ng.ports; implementation
 	    fb.fill;
 	  end
 	}
+       9:  begin
+             data.pop2 (x, y);
+             attr := vdpReadAttrMap (tScreen, cScnXRes * y + x);
+             data.push (attr[0]);
+             data.push (attr[1]);
+           end;
+       10: begin
+             data.pop2 (x, y);
+             data.pop2 (h, w);
+             attr[0] := h; attr[1] := w;
+             vdpWriteAttrMap (tScreen, cScnXRes * y + x, attr);
+           end;
+       11: begin
+             data.pop2 (x, y);
+             data.push (vdpReadCharMap (tScreen, cScnXRes * y + x));
+           end;
+       12: begin
+             data.push (vdpReadBrReg (tScreen));
+           end;
+       13: begin
+             data.pop1 (h);
+             vdpWriteBrReg (tScreen, h);
+           end;
+       14: begin
+             data.push (vdpReadFgReg (tScreen));
+           end;
+       15: begin
+             data.pop1 (h);
+             vdpWriteFgReg (tScreen, h);
+           end;
+       16: vdpRenderDisplay (tScreen);    
       else
 	result := -1;
     end
+  end; { vm.handle_canvas }
+  {$ELSE}
+  function vm.handle_canvas( msg: int32 ) : int32;
+  begin
   end;
+  {$ENDIF}
 
 
   { -- port 7 : mouse ----------------------------------------- }
