@@ -247,22 +247,26 @@ unit ng.ports; implementation
              data.push (vdpReadCharMap (tScreen, cScnXRes * y + x));
            end;
        12: begin
-             data.push (vdpReadBrReg (tScreen));
+             data.pop3 (x, y, h);
+             vdpWriteCharMap (tScreen, cScnXRes * y + x, h);
            end;
        13: begin
-             data.pop1 (h);
-             vdpWriteBrReg (tScreen, h);
+             data.push (vdpReadBgReg (tScreen));
            end;
        14: begin
-             data.push (vdpReadFgReg (tScreen));
+             data.pop1 (h);
+             vdpWriteBgReg (tScreen, h);
            end;
        15: begin
+             data.push (vdpReadFgReg (tScreen));
+           end;
+       16: begin
              data.pop1 (h);
              vdpWriteFgReg (tScreen, h);
            end;
-       16: vdpRenderDisplay (tScreen);
-       17: vdpDisplay (tScreen);
-       18: begin
+       17: vdpRenderDisplay (tScreen);
+       18: vdpDisplay (tScreen);
+       19: begin
              data.pop3 (x, y, h);
              vdpPlotPixel (tScreen, y * cScnXRes + x, h);
            end;
