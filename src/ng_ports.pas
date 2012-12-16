@@ -4,7 +4,7 @@ unit ng.ports; implementation
 
   { the handlers in this file were mostly ported from ngaro.js, then broken into routines }
 
-
+
   { -- port 0 ------------------------------------------------- }
 
   function vm.handle_syncport( msg :  int32 ): int32;
@@ -14,7 +14,7 @@ unit ng.ports; implementation
       has data to transfer. }
     result := 0;
   end;
-
+
   { -- port 1 ------------------------------------------------- }
   {
 
@@ -39,8 +39,12 @@ unit ng.ports; implementation
   { keyboard handler }
   function vm.handle_keyboard( msg : int32 ) : int32;
   begin
+    {$IFDEF GRAPHICAL}
     vdpRenderDisplay (tScreen);
     result := ord (vdpPollKeyboard (tScreen));
+    {$ELSE}
+    result := ord( kvm.readkey );
+    {$ENDIF}
   end;
 
   { input file handler }
@@ -55,41 +59,43 @@ unit ng.ports; implementation
       result := ord( ch );
     end
   end;
-
+
   { -- port 2 : simple text output ---------------------------- }
 
+  {$IFDEF GRAPHICAL}
   procedure vm.clear;
     var i : longword;
   begin
     for i := 0 to cScnChrSize do tScreen.aCharMap[i] := 0;
     for i := 0 to cScnAtrSize do tScreen.aAttrMap[i] := 0;
-    cx := 0; cy := 0;  
-  end;    
-    
+    cx := 0; cy := 0;
+  end;
+
+
   function vm.handle_write (msg : int32): int32;
     var x:    int32;
         adr:  longword;
         attr: tVDPAttrData;
-            
+
     procedure cursorRight; inline;
     begin
       if cx < cScnCol-1 then cx := cx + 1
-                        else if cy < cScnRow-1 then begin cy := cy + 1; cx := 0;   end
-                                               else begin clear; cy := 0; cx := 0; end;
+      else if cy < cScnRow-1 then begin cy := cy + 1; cx := 0;   end
+      else begin clear; cy := 0; cx := 0; end;
     end;
-  
+
     procedure cursorLeft; inline;
     begin
       if cx < cScnCol-1 then cx := cx-1;
     end;
-  
+
     procedure cursorBackspace; inline;
     begin
-      attr[1] := 0; vdpWriteAttrMap (tScreen, adr, attr);    
+      attr[1] := 0; vdpWriteAttrMap (tScreen, adr, attr);
       vdpWriteCharMap (tScreen, adr, 0);
-      if (cx < cScnCol-1) and (cx > 0) then cx := cx - 1;         
+      if (cx < cScnCol-1) and (cx > 0) then cx := cx - 1;
     end;
-  
+
     procedure cursorReturn; inline;
     begin
       attr[1] := 0; vdpWriteAttrMap (tScreen, adr, attr);
@@ -97,7 +103,7 @@ unit ng.ports; implementation
       if cy > cScnRow-1 then begin
          clear; cy := 0; cx := 0; end;
     end;
-    
+
   begin
     if msg = 1 then begin
       x := self.data.pop;
@@ -118,7 +124,34 @@ unit ng.ports; implementation
     count := count + 1;
     result := 0;
   end;
-          
+
+  {$ELSE}
+  procedure clear;
+  begin
+    kvm.clrscr;
+    kvm.gotoxy( 0, 0 );
+  end; { clear }
+
+  function vm.handle_write( msg : int32 ) : int32;
+    var x : int32;
+  begin
+    if msg = 1 then begin
+      x := self.data.pop;
+      if x < 0 then clear
+      else if x < 32 then
+        case chr( x ) of
+          ^H : write( ^H, ' ', ^H );
+          ^J : writeln;
+          ^M : ;
+          else write( chr( x ))
+        end
+      else write( chr( x ))
+    end;
+    result := 0;
+  end; { vm.handle_write }
+  {$ENDIF}
+
+
   { -- port 3 : video refresh --------------------------------- }
 
   function vm.handle_refresh( msg : int32 ) : int32;
@@ -126,7 +159,7 @@ unit ng.ports; implementation
     { Whether I need to do anything here depends on how I implement KVM stuff }
     result := 0;
   end;
-
+
   { -- port 4 : file i/o -------------------------------------- }
 
   { see also ng.files.pas }
@@ -149,7 +182,7 @@ unit ng.ports; implementation
       -8 : begin data.pop1( t );      ng.file_delete( rx_getstring( t ), result )    end;
     end; { case }
   end; { handle_files }
-
+
   { -- port 5 : vm query -------------------------------------- }
 
   function vm.handle_vmquery( msg: int32 ) : int32;
@@ -179,13 +212,14 @@ unit ng.ports; implementation
       64  : self.debugmode := true;
 
       else
-	result := -1
+        result := -1
     end
   end;
 
-
+
   { -- port 6 : graphic canvas -------------------------------- }
 
+  {$IFDEF GRAPHICAL}
   function vm.handle_canvas( msg: int32 ) : int32;
      var x, y, h, w : int32;
          attr: tVdpAttrData;
@@ -196,40 +230,40 @@ unit ng.ports; implementation
       { kvm.setcolor( data.pop );
 
       2 : begin
-	    data.pop2( y, x );
-	    fb.fillRect(x, y, 2, 2);
-	  end;
+            data.pop2( y, x );
+            fb.fillRect(x, y, 2, 2);
+          end;
       3 : begin
-	    data.pop4( w, h, y, x );
-	    fb.strokeRect(x, y, w, h);
-	  end;
+            data.pop4( w, h, y, x );
+            fb.strokeRect(x, y, w, h);
+          end;
       4 : begin
-	    data.pop4( w, h, y, x );
-	    fb.fillRect(x, y, w, h);
-	  end;
+            data.pop4( w, h, y, x );
+            fb.fillRect(x, y, w, h);
+          end;
       5 : begin
-	    data.pop3( h, y, x );
-	    fb.fillRect(x, y, 2, h);
-	  end;
+            data.pop3( h, y, x );
+            fb.fillRect(x, y, 2, h);
+          end;
       6 : begin
-	    data.pop3( w, y, x );
-	    fb.fillRect(x, y, w, 2);
-	  end;
+            data.pop3( w, y, x );
+            fb.fillRect(x, y, w, 2);
+          end;
       7 : begin
-	    data.pop3( w, y, x );
-	    fb.beginPath;
-	    fb.arc(x, y, w, 0, Math.PI*2, true);
-	    fb.closePath();
-	    fb.stroke();
-	  end;
+            data.pop3( w, y, x );
+            fb.beginPath;
+            fb.arc(x, y, w, 0, Math.PI*2, true);
+            fb.closePath();
+            fb.stroke();
+          end;
       8 : begin
-	    data.pop3( w, y, x );
-	    fb.beginPath;
-	    fb.arc(x, y, w, 0, Math.PI*2, true);
-	    fb.closePath;
-	    fb.fill;
-	  end
-	}
+            data.pop3( w, y, x );
+            fb.beginPath;
+            fb.arc(x, y, w, 0, Math.PI*2, true);
+            fb.closePath;
+            fb.fill;
+          end
+        }
        9:  begin
              data.pop2 (x, y);
              attr := vdpReadAttrMap (tScreen, cScnXRes * y + x);
@@ -271,10 +305,16 @@ unit ng.ports; implementation
              vdpPlotPixel (tScreen, y * cScnXRes + x, h);
            end;
       else
-	result := -1;
+        result := -1;
     end
+  end; { vm.handle_canvas }
+  {$ELSE}
+  function vm.handle_canvas( msg: int32 ) : int32;
+  begin
   end;
+  {$ENDIF}
 
+
   { -- port 7 : mouse ----------------------------------------- }
 
   function vm.handle_mouse( msg : int32 ) : int32;
@@ -286,7 +326,7 @@ unit ng.ports; implementation
       else result := -1;
     end;
   end;
-
+
   { -- port 8 : enhanced terminal ----------------------------- }
 
   function vm.handle_eterm( msg : int32 ) : int32;
@@ -297,10 +337,11 @@ unit ng.ports; implementation
       2 : { n- } kvm.fg( data.pop );
       3 : { n- } kvm.bg( data.pop );
       else
-	result := -1;
+        result := -1;
     end;
   end;
 
+
   { -- the port map ------------------------------------------- }
 
   procedure vm.init_porthandlers;
@@ -323,6 +364,7 @@ unit ng.ports; implementation
     self.devices[8] := @self.handle_eterm;
   end; { init_porthandlers }
 
+
 {$IFDEF NESTUNITS}
 end.
 {$ENDIF}
