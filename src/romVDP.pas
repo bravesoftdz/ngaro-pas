@@ -102,6 +102,8 @@ FUNCTION  vdpReadCharMap
   (VAR handle : tVDP; adr : LONGWORD) : BYTE;
 PROCEDURE vdpWriteCharMap
   (VAR handle : tVDP; adr : LONGWORD; value : BYTE);
+PROCEDURE vdpPlotPixel
+  (VAR handle : tVDP; adr : LONGWORD; value : BYTE);
 
 PROCEDURE vdpRenderChar
   (VAR handle : tVDP; adr : LONGWORD; value : BYTE);
@@ -129,6 +131,12 @@ BEGIN
   rBitmap  := handle.rVStart  * cScnXRes + handle.rHStart + 
               pBitmap^.pixels + adr;
   rBitmap^ := value;
+END;
+
+PROCEDURE vdpPlotPixel
+(VAR handle : tVDP; adr : LONGWORD; value : BYTE); INLINE;
+BEGIN
+  plotPixel (handle, adr, value);
 END;
 
 PROCEDURE vdpInit;

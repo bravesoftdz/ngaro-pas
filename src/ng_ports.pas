@@ -4,7 +4,7 @@ unit ng.ports; implementation
 
   { the handlers in this file were mostly ported from ngaro.js, then broken into routines }
 
-
+
   { -- port 0 ------------------------------------------------- }
 
   function vm.handle_syncport( msg :  int32 ): int32;
@@ -14,7 +14,7 @@ unit ng.ports; implementation
       has data to transfer. }
     result := 0;
   end;
-
+
   { -- port 1 ------------------------------------------------- }
   {
 
@@ -39,12 +39,8 @@ unit ng.ports; implementation
   { keyboard handler }
   function vm.handle_keyboard( msg : int32 ) : int32;
   begin
-    {$IFDEF GRAPHICAL}
     vdpRenderDisplay (tScreen);
-    result := ord (vdpPollKeyboard (tScreen));    
-    {$ELSE}
-    result := ord( kvm.readkey );
-    {$ENDIF}
+    result := ord (vdpPollKeyboard (tScreen));
   end;
 
   { input file handler }
@@ -59,10 +55,9 @@ unit ng.ports; implementation
       result := ord( ch );
     end
   end;
-
+
   { -- port 2 : simple text output ---------------------------- }
 
-  {$IFDEF GRAPHICAL}
   procedure vm.clear;
     var i : longword;
   begin
@@ -70,7 +65,6 @@ unit ng.ports; implementation
     for i := 0 to cScnAtrSize do tScreen.aAttrMap[i] := 0;
     cx := 0; cy := 0;  
   end;    
-
     
   function vm.handle_write (msg : int32): int32;
     var x:    int32;
@@ -124,34 +118,7 @@ unit ng.ports; implementation
     count := count + 1;
     result := 0;
   end;
-
-  {$ELSE}
-  procedure clear;
-  begin
-    kvm.clrscr;
-    kvm.gotoxy( 0, 0 );
-  end; { clear }
-
-  function vm.handle_write( msg : int32 ) : int32;
-    var x : int32;
-  begin
-    if msg = 1 then begin
-      x := self.data.pop;
-      if x < 0 then clear
-      else if x < 32 then
-	case chr( x ) of
-	  ^H : write( ^H, ' ', ^H );
-	  ^J : writeln;
-	  ^M : ;
-	  else write( chr( x ))
-	end
-      else write( chr( x ))
-    end;
-    result := 0;
-  end; { vm.handle_write }
-  {$ENDIF}
-  
-
+          
   { -- port 3 : video refresh --------------------------------- }
 
   function vm.handle_refresh( msg : int32 ) : int32;
@@ -159,7 +126,7 @@ unit ng.ports; implementation
     { Whether I need to do anything here depends on how I implement KVM stuff }
     result := 0;
   end;
-
+
   { -- port 4 : file i/o -------------------------------------- }
 
   { see also ng.files.pas }
@@ -182,7 +149,7 @@ unit ng.ports; implementation
       -8 : begin data.pop1( t );      ng.file_delete( rx_getstring( t ), result )    end;
     end; { case }
   end; { handle_files }
-
+
   { -- port 5 : vm query -------------------------------------- }
 
   function vm.handle_vmquery( msg: int32 ) : int32;
@@ -216,10 +183,9 @@ unit ng.ports; implementation
     end
   end;
 
-
+
   { -- port 6 : graphic canvas -------------------------------- }
 
-  {$IFDEF GRAPHICAL}
   function vm.handle_canvas( msg: int32 ) : int32;
      var x, y, h, w : int32;
          attr: tVdpAttrData;
@@ -294,18 +260,17 @@ unit ng.ports; implementation
              data.pop1 (h);
              vdpWriteFgReg (tScreen, h);
            end;
-       16: vdpRenderDisplay (tScreen);    
+       16: vdpRenderDisplay (tScreen);
+       17: vdpDisplay (tScreen);
+       18: begin
+             data.pop3 (x, y, h);
+             vdpPlotPixel (tScreen, y * cScnXRes + x, h);
+           end;
       else
 	result := -1;
     end
-  end; { vm.handle_canvas }
-  {$ELSE}
-  function vm.handle_canvas( msg: int32 ) : int32;
-  begin
   end;
-  {$ENDIF}
 
-
   { -- port 7 : mouse ----------------------------------------- }
 
   function vm.handle_mouse( msg : int32 ) : int32;
@@ -317,7 +282,7 @@ unit ng.ports; implementation
       else result := -1;
     end;
   end;
-
+
   { -- port 8 : enhanced terminal ----------------------------- }
 
   function vm.handle_eterm( msg : int32 ) : int32;
@@ -332,7 +297,6 @@ unit ng.ports; implementation
     end;
   end;
 
-
   { -- the port map ------------------------------------------- }
 
   procedure vm.init_porthandlers;
@@ -355,7 +319,6 @@ unit ng.ports; implementation
     self.devices[8] := @self.handle_eterm;
   end; { init_porthandlers }
 
-
 {$IFDEF NESTUNITS}
 end.
 {$ENDIF}
